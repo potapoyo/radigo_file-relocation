@@ -1,7 +1,7 @@
 import os
 import argparse
 import time
-from pydrive2.auth import GoogleAuth, RefreshError, AuthenticationError
+from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
 from datetime import datetime
 
@@ -10,7 +10,7 @@ def log_message(message):
     log_dir = 'logs'
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
-    
+
     if 'log_file' not in globals():
         base_filename = os.path.join(log_dir, f"log_{datetime.now().strftime('%Y%m%d%H%M%S')}.txt")
         counter = 1
@@ -25,46 +25,22 @@ def log_message(message):
 
 def get_drive_session():
     """Google Driveのセッションを取得する関数"""
-    gauth = GoogleAuth(settings_file='settings.yaml') # settings.yaml を使用
+    gauth = GoogleAuth(settings_file='settings.yaml')
     try:
-        # settings.yaml に有効な認証情報があれば、LocalWebserverAuth は不要
-        # なければ、または期限切れでリフレッシュもできない場合は、認証フローが開始される
-        gauth.Authorize() # これで認証情報の読み込み、リフレッシュ、必要なら認証フロー開始を試みる
+        # サービスアカウント認証
+        gauth.ServiceAuth()
         drive = GoogleDrive(gauth)
-        log_message("Google Driveセッションを取得しました")
+        log_message("Google Driveセッションを取得しました (サービスアカウント)")
         return drive, gauth
-    except (RefreshError, AuthenticationError) as auth_error: # AuthenticationError もキャッチ
-        log_message(f"認証/リフレッシュに失敗しました。再認証を試みます: {str(auth_error)}")
-        try:
-            gauth.CommandLineAuth() # 手動認証 (コマンドライン)
-            drive = GoogleDrive(gauth)
-            log_message("Google Driveセッションを再認証して取得しました")
-            return drive, gauth
-        except Exception as auth_e:
-            log_message(f"再認証中のGoogle Driveセッション取得に失敗しました: {str(auth_e)}")
-            raise
     except Exception as e:
-        log_message(f"Google Driveセッションの取得に失敗しました: {str(e)}")
-        raise
-
-def refresh_drive_session(gauth):
-    """Google Driveのセッションを再取得する関数 (主にRefreshError対応)"""
-    try:
-        log_message("Google Driveセッションの再取得を試みています (RefreshError)...")
-        # gauth インスタンスはそのまま使い、再度認証フローを試みる
-        gauth.CommandLineAuth() # リフレッシュトークンが無効なので、再認証 (コマンドライン)
-        drive = GoogleDrive(gauth)
-        log_message("Google Driveセッションを再認証経由で再取得しました")
-        return drive
-    except Exception as e:
-        log_message(f"Google Driveセッションの再取得に失敗しました: {str(e)}")
+        log_message(f"サービスアカウントでのGoogle Driveセッション取得に失敗しました: {str(e)}")
         raise
 
 def organize_files(dry_run=False, max_retries=3):
     retry_count = 0
     drive = None
     gauth = None
-    
+
     while retry_count <= max_retries:
         try:
             if drive is None or gauth is None:
@@ -160,10 +136,10 @@ def organize_files(dry_run=False, max_retries=3):
                             file['parents'] = [{'id': folder['id']}]
                             file.Upload()
                             log_message(f"ファイル {file_name} を {target_folder} に移動しました。")
-                        except (RefreshError, Exception) as e:
-                            log_message(f"ファイル {file_name} の処理中にエラーが発生しました: {str(e)}")
+                        except Exception as e:
+                            log_message(f"ファイル {file_name} の処理中にエラーが発生しました: {str(e)}。リトライします。")
                             # セッションを再取得して再試行
-                            drive = refresh_drive_session(gauth)
+                            drive, gauth = get_drive_session()
                             folder = create_or_get_folder(drive, target_folder)
                             file['parents'] = [{'id': folder['id']}]
                             file.Upload()
@@ -172,14 +148,6 @@ def organize_files(dry_run=False, max_retries=3):
             log_message("ファイルの整理が完了しました。" if not dry_run else "ドライランが完了しました。")
             return  # 正常終了
 
-        except RefreshError as e:
-            retry_count += 1
-            log_message(f"セッションの有効期限が切れました。再試行 {retry_count}/{max_retries}")
-            if retry_count <= max_retries:
-                time.sleep(2)  # 少し待機してから再試行
-            else:
-                log_message(f"最大再試行回数に達しました。処理を中止します: {str(e)}")
-                raise
         except Exception as e:
             retry_count += 1
             log_message(f"エラーが発生しました: {str(e)}。再試行 {retry_count}/{max_retries}")
@@ -203,9 +171,6 @@ def create_or_get_folder(drive, folder_path):
                 folder.Upload()
             parent_id = folder['id']
         return folder
-    except RefreshError:
-        # セッション切れの場合は呼び出し元で処理
-        raise
     except Exception as e:
         log_message(f"フォルダの作成/取得中にエラーが発生しました: {str(e)}")
         raise
@@ -214,22 +179,5 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='ラジオ録音ファイルを整理するスクリプト')
     parser.add_argument('--dry-run', action='store_true', help='ドライランモードで実行（実際にファイルは移動しません）')
     parser.add_argument('--max-retries', type=int, default=3, help='セッション再取得の最大試行回数')
-    parser.add_argument('--refresh-session', action='store_true', help='Google Driveのセッションを再取得します')
     args = parser.parse_args()
-
-    if args.refresh_session:
-        log_message("Google Driveのセッション再取得を開始します...")
-        try:
-            drive, gauth = get_drive_session()
-            if drive and gauth:
-                log_message("Google Driveのセッションが正常に取得/再取得されました。")
-                # 認証情報を保存する (settings.yaml の save_credentials が True の場合)
-                if gauth.settings.get('save_credentials', False):
-                    gauth.SaveCredentialsFile(gauth.settings.get('save_credentials_file', 'credentials.json'))
-                    log_message(f"認証情報を {gauth.settings.get('save_credentials_file', 'credentials.json')} に保存しました。")
-            else:
-                log_message("Google Driveのセッション取得に失敗しました。")
-        except Exception as e:
-            log_message(f"セッション再取得中にエラーが発生しました: {str(e)}")
-    else:
-        organize_files(dry_run=args.dry_run, max_retries=args.max_retries)
+    organize_files(dry_run=args.dry_run, max_retries=args.max_retries)

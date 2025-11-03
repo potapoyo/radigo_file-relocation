@@ -1,10 +1,9 @@
-client_config_backend: file
-output_folder_id: <output_folder_id> # Google Driveの出力先フォルダID
-target_folder_path: <audio/radio/> # Google Drive内の基本的な保存先パス
-client_config_file: <client_secrets_json_path> # client_secrets.jsonへのパスを指定
-save_credentials: True
-save_credentials_backend: file
-save_credentials_file: credentials.json
-get_refresh_token: True
-oauth_scope:
-  - https://www.googleapis.com/auth/drive
+# Google Driveの出力先フォルダID
+output_folder_id: <output_folder_id>
+
+# Google Drive内の基本的な保存先パス
+target_folder_path: audio/radio/
+
+# サービスアカウントの認証情報JSONファイルへのパス
+# このファイルはGitHub Actionsの実行環境に一時的に作成されます
+service_account_credentials_file: service_account.json
