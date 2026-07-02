@@ -102,7 +102,7 @@ def organize_files(dry_run=False, max_retries=3):
                     {"folder": "01-週替わりANN0", "weekday": 6, "hour": 3},
                     {"folder": "12-キタニタツヤのANN0", "weekday": 1, "hour": 3},
                     {"folder": "21-サカナクション山口一郎のオールナイトニッポン", "weekday": 2, "hour": 1},
-                    {"folder": "22-松田好花のオールナイトニッポン0", "weekday": 2, "hour": 2},
+                    {"folder": "22-松田好花のオールナイトニッポン0", "weekday": 2, "hour": 3},
                     {"folder": "42-佐久間宣行のオールナイトニッポン0", "weekday": 3, "hour": 3},
                     {"folder": "51-ナインティナインのオールナイトニッポン", "weekday": 4, "hour": 1},
                     {"folder": "52-マヂカルラブリーのANN0", "weekday": 4, "hour": 3},
