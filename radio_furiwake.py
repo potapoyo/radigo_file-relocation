@@ -4,6 +4,7 @@ import time
 from pydrive2.auth import GoogleAuth, RefreshError, AuthenticationError
 from pydrive2.drive import GoogleDrive
 from datetime import datetime
+from tqdm import tqdm
 
 def log_message(message):
     global log_file
@@ -102,7 +103,7 @@ def organize_files(dry_run=False, max_retries=3):
                     {"folder": "01-週替わりANN0", "weekday": 6, "hour": 3},
                     {"folder": "12-キタニタツヤのANN0", "weekday": 1, "hour": 3},
                     {"folder": "21-サカナクション山口一郎のオールナイトニッポン", "weekday": 2, "hour": 1},
-                    {"folder": "22-松田好花のオールナイトニッポン0", "weekday": 2, "hour": 2},
+                    {"folder": "22-松田好花のオールナイトニッポン0", "weekday": 2, "hour": 3},
                     {"folder": "42-佐久間宣行のオールナイトニッポン0", "weekday": 3, "hour": 3},
                     {"folder": "51-ナインティナインのオールナイトニッポン", "weekday": 4, "hour": 1},
                     {"folder": "52-マヂカルラブリーのANN0", "weekday": 4, "hour": 3},
@@ -132,47 +133,49 @@ def organize_files(dry_run=False, max_retries=3):
                 ]
             }
 
-            for file in file_list:
+            aac_files = [f for f in file_list if f['title'].endswith('.aac')]
+            
+            for file in tqdm(aac_files, desc="処理中", unit="file"):
                 file_name = file['title']
-                if file_name.endswith('.aac'):
-                    # ファイル名からメタデータを抽出
-                    date_time, station_code = file_name.split('-')
-                    station_code = station_code.split('.')[0]
+                
+                # ファイル名からメタデータを抽出
+                date_time, station_code = file_name.split('-')
+                station_code = station_code.split('.')[0]
 
-                    # 日時オブジェクトを作成 (最後の "00" を無視)
-                    file_date = datetime.strptime(date_time[:-2], "%Y%m%d%H%M")
+                # 日時オブジェクトを作成 (最後の "00" を無視)
+                file_date = datetime.strptime(date_time[:-2], "%Y%m%d%H%M")
 
-                    # 適切なフォルダを決定
-                    target_folder = f'{config_target_folder_path}{station_code}' # 設定ファイルから読み込んだ値を使用
+                # 適切なフォルダを決定
+                target_folder = f'{config_target_folder_path}{station_code}' # 設定ファイルから読み込んだ値を使用
 
-                    if station_code in programs:
-                        for program in programs[station_code]:
-                            if file_date.hour == program["hour"] and file_date.weekday() == program["weekday"]:
-                                target_folder += f'/{program["folder"]}'
-                                break
-                    else:
-                        log_message(f"未知の放送局コード: {station_code}")
-                        continue
+                if station_code in programs:
+                    for program in programs[station_code]:
+                        if file_date.hour == program["hour"] and file_date.weekday() == program["weekday"]:
+                            target_folder += f'/{program["folder"]}'
+                            break
+                else:
+                    log_message(f"未知の放送局コード: {station_code}")
+                    continue
 
-                    if dry_run:
-                        log_message(f"[ドライラン] ファイル {file_name} を {target_folder} に移動します。")
-                    else:
-                        try:
-                            # フォルダを作成または取得
-                            folder = create_or_get_folder(drive, target_folder)
+                if dry_run:
+                    log_message(f"[ドライラン] ファイル {file_name} を {target_folder} に移動します。")
+                else:
+                    try:
+                        # フォルダを作成または取得
+                        folder = create_or_get_folder(drive, target_folder)
 
-                            # ファイルを移動
-                            file['parents'] = [{'id': folder['id']}]
-                            file.Upload()
-                            log_message(f"ファイル {file_name} を {target_folder} に移動しました。")
-                        except (RefreshError, Exception) as e:
-                            log_message(f"ファイル {file_name} の処理中にエラーが発生しました: {str(e)}")
-                            # セッションを再取得して再試行
-                            drive = refresh_drive_session(gauth)
-                            folder = create_or_get_folder(drive, target_folder)
-                            file['parents'] = [{'id': folder['id']}]
-                            file.Upload()
-                            log_message(f"セッション再取得後、ファイル {file_name} を {target_folder} に移動しました。")
+                        # ファイルを移動
+                        file['parents'] = [{'id': folder['id']}]
+                        file.Upload()
+                        log_message(f"ファイル {file_name} を {target_folder} に移動しました。")
+                    except (RefreshError, Exception) as e:
+                        log_message(f"ファイル {file_name} の処理中にエラーが発生しました: {str(e)}")
+                        # セッションを再取得して再試行
+                        drive = refresh_drive_session(gauth)
+                        folder = create_or_get_folder(drive, target_folder)
+                        file['parents'] = [{'id': folder['id']}]
+                        file.Upload()
+                        log_message(f"セッション再取得後、ファイル {file_name} を {target_folder} に移動しました。")
 
             log_message("ファイルの整理が完了しました。" if not dry_run else "ドライランが完了しました。")
             return  # 正常終了
