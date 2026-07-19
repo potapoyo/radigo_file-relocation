@@ -1,0 +1,7 @@
+[project]
+name = "radigo-file-relocation"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11.15"
+dependencies = []
